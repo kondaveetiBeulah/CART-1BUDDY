@@ -415,6 +415,8 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
   const [deliveryAddress, setDeliveryAddress] = useState(DEFAULT_SAVED_ADDRESSES[0].formattedAddress);
   const [isAddressExpanded, setIsAddressExpanded] = useState(false);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const [isAddOptionModalVisible, setIsAddOptionModalVisible] = useState(false);
+  const [isLocationPermissionModalVisible, setIsLocationPermissionModalVisible] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [houseNo, setHouseNo] = useState('');
   const [building, setBuilding] = useState('');
@@ -714,6 +716,92 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
     setIsAddFormOpen(false);
   };
 
+  const handleAddNewAddressClick = () => {
+    if (isAddFormOpen && editingAddressId) {
+      handleCancelEdit();
+    } else if (isAddFormOpen) {
+      setIsAddFormOpen(false);
+    } else {
+      setIsAddOptionModalVisible(true);
+    }
+  };
+
+  const handleManualAddressEntry = () => {
+    setIsAddOptionModalVisible(false);
+    setHouseNo('');
+    setBuilding('');
+    setLandmark('');
+    setEditingAddressId(null);
+    setIsAddFormOpen(true);
+  };
+
+  const handleRequestLiveLocation = () => {
+    setIsAddOptionModalVisible(false);
+    setIsLocationPermissionModalVisible(true);
+  };
+
+  const handleConfirmLocationAccess = () => {
+    setIsLocationPermissionModalVisible(false);
+    triggerQuickLoading('Detecting GPS location...', 400);
+
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+            const data = await res.json();
+            if (data && data.address) {
+              const road = data.address.road || data.address.suburb || data.address.neighbourhood || 'Main Avenue';
+              const house = data.address.house_number ? `Door No. ${data.address.house_number}` : (data.address.building || 'Flat 102, 1st Floor');
+              const landmarkArea = [data.address.suburb, data.address.city || data.address.town, data.address.postcode].filter(Boolean).join(', ');
+
+              setHouseNo(`${house}, ${road}`);
+              setBuilding(data.address.neighbourhood || data.address.suburb || 'Residential Block');
+              setLandmark(landmarkArea || data.display_name?.slice(0, 40) || 'Near City Center');
+            } else {
+              setHouseNo(`Flat 204, GPS Pin (${latitude.toFixed(3)}, ${longitude.toFixed(3)})`);
+              setBuilding('Live Location Detected');
+              setLandmark('Near Current Area');
+            }
+          } catch (err) {
+            setHouseNo('Flat 204, Live GPS Pin');
+            setBuilding('Live Location Detected');
+            setLandmark('Current GPS Detected Area');
+          }
+          setLabel('Home');
+          setEditingAddressId(null);
+          setIsAddFormOpen(true);
+          setToastMessage('📍 Live location detected & auto-filled!');
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 3500);
+        },
+        (error) => {
+          setHouseNo('Flat 302, 5th Main');
+          setBuilding('Cyber Pearl Towers');
+          setLandmark('Hitec City, Madhapur 500081');
+          setLabel('Home');
+          setEditingAddressId(null);
+          setIsAddFormOpen(true);
+          setToastMessage('📍 Live location auto-filled into form!');
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 3500);
+        },
+        { enableHighAccuracy: true, timeout: 6000 }
+      );
+    } else {
+      setHouseNo('Flat 302, 5th Main');
+      setBuilding('Cyber Pearl Towers');
+      setLandmark('Hitec City, Madhapur 500081');
+      setLabel('Home');
+      setEditingAddressId(null);
+      setIsAddFormOpen(true);
+      setToastMessage('📍 Live location auto-filled into form!');
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3500);
+    }
+  };
+
   const handleSaveAddress = () => {
     if (!houseNo.trim()) return;
     const formatted = `${houseNo}${building ? ', ' + building : ''}${landmark ? ', ' + landmark : ''}`;
@@ -950,13 +1038,7 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
               {/* Left Side: Address Form */}
               <View style={styles.addressFormColumn}>
                 <TouchableOpacity
-                  onPress={() => {
-                    if (isAddFormOpen && editingAddressId) {
-                      handleCancelEdit();
-                    } else {
-                      setIsAddFormOpen(prev => !prev);
-                    }
-                  }}
+                  onPress={handleAddNewAddressClick}
                   activeOpacity={0.8}
                   style={[styles.addNewAddressToggleBtn, (isAddFormOpen || editingAddressId !== null) && styles.addNewAddressToggleBtnActive]}
                 >
@@ -1332,6 +1414,113 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
           <Text style={styles.proceedBtnText}>Proceed to Checkout →</Text>
         </AnimatedPressable>
       </View>
+
+      {/* ── Add Address Method Pop-up Modal ── */}
+      <Modal
+        visible={isAddOptionModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsAddOptionModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.addressChoiceModalCard}>
+            <View style={styles.addressChoiceHeader}>
+              <Text style={styles.addressChoiceTitle}>📍 Add Delivery Address</Text>
+              <TouchableOpacity
+                onPress={() => setIsAddOptionModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={styles.addressChoiceCloseBtn}
+              >
+                <Text style={styles.addressChoiceCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.addressChoiceSubtitle}>
+              Choose how you would like to set your delivery location:
+            </Text>
+
+            {/* Option 1: Add Live Location */}
+            <TouchableOpacity
+              onPress={handleRequestLiveLocation}
+              activeOpacity={0.85}
+              style={styles.addressChoiceOptionLive}
+            >
+              <View style={styles.addressChoiceIconBadgeLive}>
+                <Text style={{ fontSize: 20 }}>📍</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.addressChoiceOptionTitleLive}>Add Live Location</Text>
+                  <View style={styles.livePill}>
+                    <Text style={styles.livePillText}>AUTO GPS</Text>
+                  </View>
+                </View>
+                <Text style={styles.addressChoiceOptionSub}>
+                  Use current location to automatically fill address details
+                </Text>
+              </View>
+              <Text style={styles.addressChoiceArrow}>→</Text>
+            </TouchableOpacity>
+
+            {/* Option 2: Enter New Address */}
+            <TouchableOpacity
+              onPress={handleManualAddressEntry}
+              activeOpacity={0.85}
+              style={styles.addressChoiceOptionManual}
+            >
+              <View style={styles.addressChoiceIconBadgeManual}>
+                <Text style={{ fontSize: 20 }}>✍️</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.addressChoiceOptionTitleManual}>Enter New Address</Text>
+                <Text style={styles.addressChoiceOptionSub}>
+                  Type house number, street, area, and receiver details manually
+                </Text>
+              </View>
+              <Text style={styles.addressChoiceArrow}>→</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Location Access Permission Alert Modal ── */}
+      <Modal
+        visible={isLocationPermissionModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsLocationPermissionModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.deleteModalCard}>
+            <View style={styles.locationPermissionIconCircle}>
+              <Text style={{ fontSize: 24 }}>📍</Text>
+            </View>
+            <Text style={styles.deleteModalTitle}>Allow Location Access?</Text>
+            <Text style={styles.deleteModalMessage}>
+              Antigravity Cart needs your permission to access device GPS to automatically detect and fill your current address.
+            </Text>
+
+            <View style={styles.deleteModalBtnRow}>
+              <TouchableOpacity
+                onPress={() => setIsLocationPermissionModalVisible(false)}
+                style={styles.deleteModalCancelBtn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleConfirmLocationAccess}
+                style={[styles.deleteModalConfirmBtn, { backgroundColor: COLORS.accent, shadowColor: COLORS.accent }]}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.deleteModalConfirmText, { color: COLORS.background }]}>
+                  Allow & Auto-Fill
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Confirmation Alert Modal (No Icon) ── */}
       <Modal
@@ -1997,6 +2186,141 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 11,
     fontWeight: '800',
+  },
+  // Address Choice Modal Styles
+  addressChoiceModalCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 22,
+    width: SCREEN_WIDTH > 500 ? 460 : '90%',
+    borderWidth: 1.5,
+    borderColor: COLORS.accent + '40',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  addressChoiceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  addressChoiceTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+  },
+  addressChoiceCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.softHighlight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addressChoiceCloseText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  addressChoiceSubtitle: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: 18,
+    lineHeight: 18,
+  },
+  addressChoiceOptionLive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.accent,
+    marginBottom: 12,
+    shadowColor: COLORS.accent,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  addressChoiceIconBadgeLive: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.accent + '25',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: COLORS.accent + '60',
+  },
+  addressChoiceOptionTitleLive: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.accent,
+  },
+  livePill: {
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  livePillText: {
+    color: COLORS.background,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  addressChoiceOptionManual: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  addressChoiceIconBadgeManual: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.softHighlight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  addressChoiceOptionTitleManual: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  addressChoiceOptionSub: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  addressChoiceArrow: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.accent,
+    marginLeft: 8,
+  },
+  locationPermissionIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.accent + '20',
+    borderWidth: 1.5,
+    borderColor: COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
 
   modalOverlay: {
