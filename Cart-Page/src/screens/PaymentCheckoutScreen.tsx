@@ -6,13 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
-  SafeAreaView,
   StatusBar,
   Modal,
   Platform,
   Easing,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Address, PaymentMethod } from '../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -322,7 +322,8 @@ interface PaymentCheckoutScreenProps {
   onBack?: () => void;
 }
 
-const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({ grandTotal = 42.76, onBack }) => {
+const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({ grandTotal = 499.00, onBack }) => {
+  const insets = useSafeAreaInsets();
   const [selectedAddress, setSelectedAddress] = useState<string>('addr1');
   const [selectedPayment, setSelectedPayment] = useState<string>('pm1');
   const [useWalletBalance, setUseWalletBalance] = useState(false);
@@ -333,7 +334,7 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({ grandTota
   const [orderId, setOrderId] = useState('');
   const [estimatedTime, setEstimatedTime] = useState('');
 
-  const walletBalance = 12.5;
+  const walletBalance = 250;
   const finalTotal = useWalletBalance ? Math.max(0, grandTotal - walletBalance) : grandTotal;
 
   const addressExpandAnim = useRef(new Animated.Value(0)).current;
@@ -394,7 +395,7 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({ grandTota
         <View style={styles.summaryBanner}>
           <View>
             <Text style={styles.summaryLabel}>Order Total</Text>
-            <Text style={styles.summaryAmount}>${grandTotal.toFixed(2)}</Text>
+            <Text style={styles.summaryAmount}>₹{grandTotal.toFixed(2)}</Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={styles.summaryMethodLabel}>{selectedPM.icon} {selectedPM.label}</Text>
@@ -468,7 +469,7 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({ grandTota
           <Text style={styles.sectionTitle}>Wallet & Preferences</Text>
           <GoldToggle value={useWalletBalance} onToggle={() => setUseWalletBalance(v => !v)}
             label="Use Wallet Balance"
-            subLabel={`Available: $${walletBalance.toFixed(2)} — ${useWalletBalance ? `Saves $${Math.min(walletBalance, grandTotal).toFixed(2)}` : 'Tap to apply'}`} />
+            subLabel={`Available: ₹${walletBalance.toFixed(2)} — ${useWalletBalance ? `Saves ₹${Math.min(walletBalance, grandTotal).toFixed(2)}` : 'Tap to apply'}`} />
           <View style={styles.walletDivider} />
           <GoldToggle value={saveCard} onToggle={() => setSaveCard(v => !v)}
             label="Save card for future payments" subLabel="Your data is encrypted and secure" />
@@ -479,18 +480,18 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({ grandTota
           <Text style={styles.sectionTitle}>Order Summary</Text>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryRowLabel}>Items Total</Text>
-            <Text style={styles.summaryRowValue}>${grandTotal.toFixed(2)}</Text>
+            <Text style={styles.summaryRowValue}>₹{grandTotal.toFixed(2)}</Text>
           </View>
           {useWalletBalance && (
             <View style={styles.summaryRow}>
               <Text style={styles.summaryRowLabel}>Wallet Applied</Text>
-              <Text style={[styles.summaryRowValue, { color: '#4CAF50' }]}>−${Math.min(walletBalance, grandTotal).toFixed(2)}</Text>
+              <Text style={[styles.summaryRowValue, { color: '#4CAF50' }]}>−₹{Math.min(walletBalance, grandTotal).toFixed(2)}</Text>
             </View>
           )}
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryTotalLabel}>You Pay</Text>
-            <Text style={styles.summaryTotalValue}>${finalTotal.toFixed(2)}</Text>
+            <Text style={styles.summaryTotalValue}>₹{finalTotal.toFixed(2)}</Text>
           </View>
         </View>
 
@@ -498,18 +499,18 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({ grandTota
           <Text style={styles.termsText}>By placing this order, you agree to our <Text style={styles.termsLink}>Terms of Service</Text> and <Text style={styles.termsLink}>Privacy Policy</Text></Text>
         </View>
 
-        <View style={{ height: 110 }} />
+        <View style={{ height: 130 }} />
       </ScrollView>
 
       {/* Sticky Pay Button */}
-      <View style={styles.stickyBar}>
+      <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 20), marginBottom: Platform.OS === 'android' ? 15 : 0 }]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.stickyPayLabel}>You Pay</Text>
-          <Text style={styles.stickyPayAmount}>${finalTotal.toFixed(2)}</Text>
-          {useWalletBalance && <Text style={styles.stickyWalletSave}>Wallet: −${Math.min(walletBalance, grandTotal).toFixed(2)}</Text>}
+          <Text style={styles.stickyPayAmount}>₹{finalTotal.toFixed(2)}</Text>
+          {useWalletBalance && <Text style={styles.stickyWalletSave}>Wallet: −₹{Math.min(walletBalance, grandTotal).toFixed(2)}</Text>}
         </View>
         <AnimatedPressable onPress={handlePay} style={[styles.payBtn, isProcessing && styles.payBtnDisabled]} scaleDown={0.96} disabled={isProcessing}>
-          <Text style={styles.payBtnText}>{isProcessing ? 'Processing…' : `Pay $${finalTotal.toFixed(2)}`}</Text>
+          <Text style={styles.payBtnText}>{isProcessing ? 'Processing…' : `Pay ₹${finalTotal.toFixed(2)}`}</Text>
         </AnimatedPressable>
       </View>
 

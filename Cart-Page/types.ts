@@ -7,6 +7,7 @@ export interface CartItem {
   price: number;
   quantity: number;
   imageUrl: string;
+  originalPrice?: number;
   customization?: string;
   category: string;
 }
@@ -54,4 +55,4 @@ export interface Order {
 }
 
 export type DeliveryMode = 'express' | 'scheduled';
-export type TipAmount = 0 | 2 | 3 | 5;
+export type TipAmount = 0 | 20 | 30 | 50;

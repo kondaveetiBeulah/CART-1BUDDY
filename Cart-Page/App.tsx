@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, Animated, StyleSheet, Dimensions, StatusBar } from 'react-native';
 import CartScreen from './src/screens/CartScreen';
 import PaymentCheckoutScreen from './src/screens/PaymentCheckoutScreen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -26,24 +27,26 @@ export default function App() {
   };
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#12131C" />
-      <Animated.View
-        style={[styles.screenWrapper, { transform: [{ translateX: slideAnim }] }]}
-      >
-        {currentScreen === 'cart' ? (
-          <CartScreen
-            onProceed={(total) => navigateTo('checkout', total)}
-            onBack={() => {}}
-          />
-        ) : (
-          <PaymentCheckoutScreen
-            grandTotal={grandTotal}
-            onBack={() => navigateTo('cart')}
-          />
-        )}
-      </Animated.View>
-    </View>
+    <SafeAreaProvider>
+      <View style={styles.root}>
+        <StatusBar barStyle="light-content" backgroundColor="#12131C" />
+        <Animated.View
+          style={[styles.screenWrapper, { transform: [{ translateX: slideAnim }] }]}
+        >
+          {currentScreen === 'cart' ? (
+            <CartScreen
+              onProceed={(total) => navigateTo('checkout', total)}
+              onBack={() => {}}
+            />
+          ) : (
+            <PaymentCheckoutScreen
+              grandTotal={grandTotal}
+              onBack={() => navigateTo('cart')}
+            />
+          )}
+        </Animated.View>
+      </View>
+    </SafeAreaProvider>
   );
 }
 

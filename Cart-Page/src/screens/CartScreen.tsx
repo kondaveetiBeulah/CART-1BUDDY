@@ -7,19 +7,57 @@ import {
   TouchableOpacity,
   Animated,
   Image,
-  SafeAreaView,
   StatusBar,
   FlatList,
   TextInput,
+  Modal,
   Platform,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   CartItem,
   CrossSellItem,
   DeliveryMode,
   TipAmount,
+  Address,
 } from '../types';
+
+export interface SavedAddressItem {
+  id: string;
+  label: 'Home' | 'Work' | 'Other';
+  houseNo: string;
+  building?: string;
+  landmark?: string;
+  formattedAddress: string;
+  receiverName: string;
+  receiverPhone: string;
+}
+
+const DEFAULT_SAVED_ADDRESSES: SavedAddressItem[] = [
+  {
+    id: 'addr1',
+    label: 'Work',
+    houseNo: '42 Maple Avenue',
+    building: 'Apt 3B',
+    landmark: 'San Francisco, CA 94102',
+    formattedAddress: '42 Maple Avenue, Apt 3B, San Francisco, CA 94102',
+    receiverName: 'Rushikesh Balla',
+    receiverPhone: '7666485256',
+  },
+  {
+    id: 'addr2',
+    label: 'Home',
+    houseNo: 'Flat 402, Sunset Heights',
+    building: 'Tower B',
+    landmark: 'Green Valley, CA 94103',
+    formattedAddress: 'Flat 402, Sunset Heights, Tower B, Green Valley, CA 94103',
+    receiverName: 'Rushikesh Balla',
+    receiverPhone: '7666485256',
+  },
+];
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -39,12 +77,15 @@ const COLORS = {
 };
 
 // ─── Mock Data ──────────────────────────────────────────────────────────────
+const DELIVERY_FEE = 39;
+
 const INITIAL_CART_ITEMS: CartItem[] = [
   {
     id: 'item1',
     name: 'Truffle Mushroom Burger',
     description: 'Brioche bun, aged cheddar, caramelised onion',
-    price: 14.99,
+    price: 399,
+    originalPrice: 499,
     quantity: 1,
     imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=120&h=120&fit=crop',
     customization: 'No pickles · Extra sauce',
@@ -54,7 +95,7 @@ const INITIAL_CART_ITEMS: CartItem[] = [
     id: 'item2',
     name: 'Loaded Waffle Fries',
     description: 'Seasoned, crispy with cheese dip',
-    price: 6.49,
+    price: 149,
     quantity: 2,
     imageUrl: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=120&h=120&fit=crop',
     customization: 'Extra crispy',
@@ -64,11 +105,33 @@ const INITIAL_CART_ITEMS: CartItem[] = [
     id: 'item3',
     name: 'Smoked Chicken Wings',
     description: '8 pcs · BBQ glaze · Ranch dipping sauce',
-    price: 11.99,
+    price: 299,
+    originalPrice: 349,
     quantity: 1,
     imageUrl: 'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=120&h=120&fit=crop',
     customization: 'Honey BBQ · Bone-in',
     category: 'Starters',
+  },
+  {
+    id: 'item4',
+    name: 'Margherita Basil Pizza',
+    description: 'Italian crust, fresh mozzarella, organic basil',
+    price: 349,
+    originalPrice: 399,
+    quantity: 1,
+    imageUrl: 'https://images.unsplash.com/photo-1604382355076-af4b0eb60143?w=120&h=120&fit=crop',
+    customization: 'Extra cheese · Thin crust',
+    category: 'Main',
+  },
+  {
+    id: 'item5',
+    name: 'Strawberry Cheesecake Shake',
+    description: 'Thick cream, real strawberries, graham crust',
+    price: 189,
+    quantity: 1,
+    imageUrl: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=120&h=120&fit=crop',
+    customization: 'Less sugar',
+    category: 'Beverages',
   },
 ];
 
@@ -76,34 +139,51 @@ const CROSS_SELL_ITEMS: CrossSellItem[] = [
   {
     id: 'cs1',
     name: 'Chocolate Lava Cake',
-    price: 5.99,
-    imageUrl: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=120&h=120&fit=crop',
+    price: 149,
+    imageUrl: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=120&h=120&fit=crop',
     tag: 'Bestseller',
   },
   {
     id: 'cs2',
     name: 'Craft Lemonade',
-    price: 3.49,
-    imageUrl: 'https://images.unsplash.com/photo-1621263764928-df1444c5e859?w=120&h=120&fit=crop',
+    price: 79,
+    imageUrl: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=120&h=120&fit=crop',
     tag: 'New',
   },
   {
     id: 'cs3',
     name: 'Garlic Bread Sticks',
-    price: 4.29,
+    price: 99,
     imageUrl: 'https://images.unsplash.com/photo-1573140247632-f8fd74997d5c?w=120&h=120&fit=crop',
   },
   {
     id: 'cs4',
     name: 'Onion Ring Tower',
-    price: 5.49,
+    price: 129,
     imageUrl: 'https://images.unsplash.com/photo-1639024471283-03518883512d?w=120&h=120&fit=crop',
     tag: 'Popular',
   },
+  {
+    id: 'cs5',
+    name: 'Peri Peri Dip',
+    price: 39,
+    imageUrl: 'https://images.unsplash.com/photo-1472476443507-c7a5948772fc?w=120&h=120&fit=crop',
+    tag: 'Hot',
+  },
+  {
+    id: 'cs6',
+    name: 'Classic Cold Coffee',
+    price: 119,
+    imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=120&h=120&fit=crop',
+    tag: 'Trending',
+  },
+  {
+    id: 'cs7',
+    name: 'Choco Chip Cookie',
+    price: 69,
+    imageUrl: 'https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=120&h=120&fit=crop',
+  },
 ];
-
-const DELIVERY_FEE = 2.49;
-const TAX_RATE = 0.08;
 
 // ─── AnimatedPressable ───────────────────────────────────────────────────────
 interface AnimatedPressableProps {
@@ -157,8 +237,8 @@ const AnimatedPressable: React.FC<AnimatedPressableProps> = ({
 interface CartItemRowProps {
   item: CartItem;
   onIncrement: (id: string) => void;
-  onDecrement: (id: string) => void;
-  onRemove: (id: string) => void;
+  onDecrement: (item: CartItem) => void;
+  onRemove: (item: CartItem) => void;
 }
 
 const CartItemRow: React.FC<CartItemRowProps> = ({
@@ -171,10 +251,7 @@ const CartItemRow: React.FC<CartItemRowProps> = ({
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const handleRemove = () => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: -60, duration: 300, useNativeDriver: true }),
-    ]).start(() => onRemove(item.id));
+    onRemove(item);
   };
 
   return (
@@ -197,11 +274,16 @@ const CartItemRow: React.FC<CartItemRowProps> = ({
           <Text style={styles.cartItemCustomization}>{item.customization}</Text>
         )}
         <View style={styles.cartItemFooter}>
-          <Text style={styles.cartItemPrice}>${(item.price * item.quantity).toFixed(2)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={styles.cartItemPrice}>₹{(item.price * item.quantity).toFixed(2)}</Text>
+            {item.originalPrice && item.originalPrice > item.price && (
+              <Text style={styles.cartItemOriginalPrice}>₹{(item.originalPrice * item.quantity).toFixed(2)}</Text>
+            )}
+          </View>
           <View style={styles.stepperContainer}>
             <TouchableOpacity
-              onPress={() => onDecrement(item.id)}
-              style={[styles.stepperBtn, item.quantity === 1 && styles.stepperBtnDisabled]}
+              onPress={() => onDecrement(item)}
+              style={styles.stepperBtn}
             >
               <Text style={styles.stepperBtnText}>−</Text>
             </TouchableOpacity>
@@ -224,9 +306,10 @@ interface CrossSellCardProps {
   item: CrossSellItem;
   isAdded: boolean;
   onAdd: (item: CrossSellItem) => void;
+  onDismiss?: (item: CrossSellItem) => void;
 }
 
-const CrossSellCard: React.FC<CrossSellCardProps> = ({ item, isAdded, onAdd }) => {
+const CrossSellCard: React.FC<CrossSellCardProps> = ({ item, isAdded, onAdd, onDismiss }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handleAdd = () => {
@@ -239,6 +322,15 @@ const CrossSellCard: React.FC<CrossSellCardProps> = ({ item, isAdded, onAdd }) =
   return (
     <Animated.View style={[styles.crossSellCard, { transform: [{ scale: scaleAnim }] }]}>
       <Image source={{ uri: item.imageUrl }} style={styles.crossSellImage} />
+      {onDismiss && (
+        <TouchableOpacity
+          onPress={() => onDismiss(item)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.crossSellDismissBtn}
+        >
+          <Text style={styles.crossSellDismissText}>✕</Text>
+        </TouchableOpacity>
+      )}
       {item.tag && (
         <View style={styles.crossSellTag}>
           <Text style={styles.crossSellTagText}>{item.tag}</Text>
@@ -246,7 +338,7 @@ const CrossSellCard: React.FC<CrossSellCardProps> = ({ item, isAdded, onAdd }) =
       )}
       <View style={styles.crossSellInfo}>
         <Text style={styles.crossSellName} numberOfLines={2}>{item.name}</Text>
-        <Text style={styles.crossSellPrice}>${item.price.toFixed(2)}</Text>
+        <Text style={styles.crossSellPrice}>₹{item.price.toFixed(2)}</Text>
         <TouchableOpacity
           onPress={handleAdd}
           style={[styles.crossSellAddBtn, isAdded && styles.crossSellAddBtnActive]}
@@ -288,12 +380,12 @@ const TipChip: React.FC<TipChipProps> = ({ amount, selected, onSelect }) => {
   });
 
   return (
-    <TouchableOpacity onPress={handlePress} activeOpacity={0.8}>
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.8} style={{ flex: 1 }}>
       <Animated.View style={[styles.tipChip, { backgroundColor }]}>
         <Text
           style={[styles.tipChipText, { color: selected ? COLORS.background : COLORS.textPrimary }]}
         >
-          {amount === 0 ? 'No Tip' : `$${amount}`}
+          {amount === 0 ? 'No Tip' : `₹${amount}`}
         </Text>
       </Animated.View>
     </TouchableOpacity>
@@ -307,22 +399,185 @@ interface CartScreenProps {
 }
 
 const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
+  const insets = useSafeAreaInsets();
   const [cartItems, setCartItems] = useState<CartItem[]>(INITIAL_CART_ITEMS);
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('express');
-  const [selectedTip, setSelectedTip] = useState<TipAmount>(2);
+  const [selectedTip, setSelectedTip] = useState<TipAmount>(20);
   const [addedCrossSell, setAddedCrossSell] = useState<Set<string>>(new Set());
+  const [dismissedCrossSell, setDismissedCrossSell] = useState<Set<string>>(new Set());
   const [couponCode, setCouponCode] = useState('');
   const [couponApplied, setCouponApplied] = useState(false);
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [notes, setNotes] = useState('');
 
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddressItem[]>(DEFAULT_SAVED_ADDRESSES);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>('addr1');
+  const [deliveryAddress, setDeliveryAddress] = useState(DEFAULT_SAVED_ADDRESSES[0].formattedAddress);
+  const [isAddressExpanded, setIsAddressExpanded] = useState(false);
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [houseNo, setHouseNo] = useState('');
+  const [building, setBuilding] = useState('');
+  const [landmark, setLandmark] = useState('');
+  const [label, setLabel] = useState<'Home' | 'Work' | 'Other'>('Work');
+  const [receiverName, setReceiverName] = useState('');
+  const [receiverPhone, setReceiverPhone] = useState('');
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('✅ new address added successfully');
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Loading State
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState('Updating...');
+  const loadingAnim = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  const triggerQuickLoading = (text: string = 'Updating...', duration: number = 320, callback?: () => void) => {
+    setLoadingText(text);
+    setIsLoading(true);
+    progressAnim.setValue(0.01);
+    loadingAnim.setValue(0);
+
+    Animated.parallel([
+      Animated.timing(loadingAnim, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: duration,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    setTimeout(() => {
+      Animated.timing(loadingAnim, {
+        toValue: 0,
+        duration: 120,
+        useNativeDriver: true,
+      }).start(() => {
+        setIsLoading(false);
+        if (callback) callback();
+      });
+    }, duration);
+  };
+
+  // Undo Toast State
+  const [undoToast, setUndoToast] = useState<{
+    visible: boolean;
+    message: string;
+    onUndo?: () => void;
+  }>({
+    visible: false,
+    message: '',
+  });
+  const undoTimeoutRef = useRef<any>(null);
+
+  const triggerUndoToast = (message: string, onUndo?: () => void) => {
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    setUndoToast({
+      visible: true,
+      message,
+      onUndo,
+    });
+    undoTimeoutRef.current = setTimeout(() => {
+      setUndoToast(prev => ({ ...prev, visible: false }));
+    }, 4500);
+  };
+
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Yes, Delete',
+    isDanger: true,
+    onConfirm: () => { },
+  });
+
+  const requestConfirm = (
+    title: string,
+    message: string,
+    onConfirmAction: () => void,
+    options?: { confirmText?: string; isDanger?: boolean }
+  ) => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      confirmText: options?.confirmText || 'Yes, Delete',
+      isDanger: options?.isDanger !== undefined ? options.isDanger : true,
+      onConfirm: () => {
+        onConfirmAction();
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      },
+    });
+  };
+
+  React.useEffect(() => {
+    const loadCart = async () => {
+      try {
+        const savedCart = await AsyncStorage.getItem('@cart_items');
+        if (savedCart !== null) {
+          setCartItems(JSON.parse(savedCart));
+        }
+        const savedAddrs = await AsyncStorage.getItem('@saved_addresses');
+        if (savedAddrs !== null) {
+          const parsed = JSON.parse(savedAddrs);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setSavedAddresses(parsed);
+            setSelectedAddressId(parsed[0].id);
+            setDeliveryAddress(parsed[0].formattedAddress);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load cart data', e);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+    loadCart();
+  }, []);
+
+  React.useEffect(() => {
+    if (isLoaded) {
+      AsyncStorage.setItem('@cart_items', JSON.stringify(cartItems)).catch(e =>
+        console.error('Failed to save cart data', e)
+      );
+      AsyncStorage.setItem('@saved_addresses', JSON.stringify(savedAddresses)).catch(e =>
+        console.error('Failed to save addresses data', e)
+      );
+    }
+  }, [cartItems, savedAddresses, isLoaded]);
+
+  // Animations
+  const buttonScaleAnim = useRef(new Animated.Value(1)).current;
   const segmentSlide = useRef(new Animated.Value(0)).current;
 
   // ── Calculations ────────────────────────────────────────────────────────────
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const deliveryFee = cartItems.length > 0 ? DELIVERY_FEE : 0;
-  const taxes = (subtotal + deliveryFee) * TAX_RATE;
-  const grandTotal = subtotal + deliveryFee + taxes + selectedTip - couponDiscount;
+  const FREE_DELIVERY_THRESHOLD = 499;
+  const isFreeDelivery = subtotal >= FREE_DELIVERY_THRESHOLD;
+  const deliveryFee = isFreeDelivery ? 0 : (cartItems.length > 0 ? DELIVERY_FEE : 0);
+  const amountToFreeDelivery = FREE_DELIVERY_THRESHOLD - subtotal;
+
+  const grandTotal = subtotal + deliveryFee + selectedTip - couponDiscount;
+
+  const itemDiscounts = cartItems.reduce((sum, item) => {
+    if (item.originalPrice && item.originalPrice > item.price) {
+      return sum + (item.originalPrice - item.price) * item.quantity;
+    }
+    return sum;
+  }, 0);
+  const totalDiscount = couponDiscount + itemDiscounts;
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleIncrement = useCallback((id: string) => {
@@ -331,25 +586,88 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
     );
   }, []);
 
-  const handleDecrement = useCallback((id: string) => {
-    setCartItems(prev =>
-      prev.map(item =>
-        item.id === id && item.quantity > 1 ? { ...item, quantity: item.quantity - 1 } : item
-      )
-    );
-  }, []);
+  const handleDecrement = useCallback((item: CartItem) => {
+    if (item.quantity === 1) {
+      requestConfirm(
+        'Remove from Cart',
+        `Are you sure you want to delete "${item.name}" from your cart?`,
+        () => {
+          const itemIndex = cartItems.findIndex(i => i.id === item.id);
+          setCartItems(prev => prev.filter(i => i.id !== item.id));
+          triggerUndoToast(`"${item.name}" removed from cart`, () => {
+            setCartItems(prev => {
+              const copy = [...prev];
+              copy.splice(itemIndex >= 0 ? itemIndex : copy.length, 0, item);
+              return copy;
+            });
+          });
+        }
+      );
+    } else {
+      setCartItems(prev =>
+        prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity - 1 } : i)
+      );
+    }
+  }, [cartItems]);
 
-  const handleRemove = useCallback((id: string) => {
-    setCartItems(prev => prev.filter(item => item.id !== id));
+  const handleRemove = useCallback((item: CartItem) => {
+    requestConfirm(
+      'Remove from Cart',
+      `Are you sure you want to delete "${item.name}" from your cart?`,
+      () => {
+        const itemIndex = cartItems.findIndex(i => i.id === item.id);
+        setCartItems(prev => prev.filter(i => i.id !== item.id));
+        triggerUndoToast(`"${item.name}" removed from cart`, () => {
+          setCartItems(prev => {
+            const copy = [...prev];
+            copy.splice(itemIndex >= 0 ? itemIndex : copy.length, 0, item);
+            return copy;
+          });
+        });
+      }
+    );
+  }, [cartItems]);
+
+  const handleClearAll = useCallback(() => {
+    if (cartItems.length === 0) return;
+    const previousCart = [...cartItems];
+    requestConfirm(
+      'Clear All Items',
+      'Are you sure you want to delete all items from your cart?',
+      () => {
+        setCartItems([]);
+        triggerUndoToast('All items removed from cart', () => {
+          setCartItems(previousCart);
+        });
+      }
+    );
+  }, [cartItems]);
+
+  const handleDismissCrossSell = useCallback((item: CrossSellItem) => {
+    requestConfirm(
+      'Remove Recommendation',
+      `Are you sure you want to delete "${item.name}" from recommended products?`,
+      () => {
+        setDismissedCrossSell(prev => new Set(prev).add(item.id));
+        triggerUndoToast(`"${item.name}" removed`, () => {
+          setDismissedCrossSell(prev => {
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          });
+        });
+      }
+    );
   }, []);
 
   const handleCrossSellAdd = useCallback((crossItem: CrossSellItem) => {
     if (addedCrossSell.has(crossItem.id)) return;
+    triggerQuickLoading('Adding to cart...', 260);
     setAddedCrossSell(prev => new Set(prev).add(crossItem.id));
     setCartItems(prev => [
       ...prev,
       {
-        id: crossItem.id,
+        id: `cart_${crossItem.id}_${Date.now()}`,
         name: crossItem.name,
         description: 'Add-on item',
         price: crossItem.price,
@@ -360,78 +678,239 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
     ]);
   }, [addedCrossSell]);
 
-  const handleDeliveryMode = (mode: DeliveryMode) => {
-    setDeliveryMode(mode);
-    Animated.spring(segmentSlide, {
-      toValue: mode === 'express' ? 0 : 1,
-      useNativeDriver: false,
-      speed: 20,
-      bounciness: 6,
-    }).start();
+  const handleApplyCoupon = () => {
+    triggerQuickLoading('Applying promo...', 320, () => {
+      if (couponCode.toUpperCase() === 'SAVE10') {
+        setCouponApplied(true);
+        setCouponDiscount(subtotal * 0.1);
+      } else if (couponCode.toUpperCase() === 'FLAT50') {
+        setCouponApplied(true);
+        setCouponDiscount(50);
+      } else {
+        setCouponApplied(false);
+        setCouponDiscount(0);
+      }
+    });
   };
 
-  const handleApplyCoupon = () => {
-    if (couponCode.toUpperCase() === 'SAVE10') {
-      setCouponApplied(true);
-      setCouponDiscount(subtotal * 0.1);
-    } else if (couponCode.toUpperCase() === 'FLAT5') {
-      setCouponApplied(true);
-      setCouponDiscount(5);
-    } else {
-      setCouponApplied(false);
-      setCouponDiscount(0);
+  const handleStartEditAddress = (addr: SavedAddressItem) => {
+    setEditingAddressId(addr.id);
+    setHouseNo(addr.houseNo);
+    setBuilding(addr.building || '');
+    setLandmark(addr.landmark || '');
+    setLabel(addr.label);
+    setReceiverName(addr.receiverName === 'Guest' ? '' : addr.receiverName);
+    setReceiverPhone(addr.receiverPhone || '');
+    setIsAddFormOpen(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingAddressId(null);
+    setHouseNo('');
+    setBuilding('');
+    setLandmark('');
+    setReceiverName('');
+    setReceiverPhone('');
+    setIsAddFormOpen(false);
+  };
+
+  const handleSaveAddress = () => {
+    if (!houseNo.trim()) return;
+    const formatted = `${houseNo}${building ? ', ' + building : ''}${landmark ? ', ' + landmark : ''}`;
+    const isEditing = editingAddressId !== null;
+
+    requestConfirm(
+      isEditing ? 'Update Delivery Address' : 'Save & Deliver to Address',
+      `Are you sure you want to ${isEditing ? 'update and deliver to' : 'save and deliver to'} this address?\n\n"${formatted}"`,
+      () => {
+        if (isEditing) {
+          triggerQuickLoading('Updating address...', 280);
+          setSavedAddresses(prev =>
+            prev.map(a =>
+              a.id === editingAddressId
+                ? {
+                  ...a,
+                  label,
+                  houseNo,
+                  building,
+                  landmark,
+                  formattedAddress: formatted,
+                  receiverName: receiverName.trim() || 'Guest',
+                  receiverPhone: receiverPhone.trim() || '',
+                }
+                : a
+            )
+          );
+          setSelectedAddressId(editingAddressId);
+          setDeliveryAddress(formatted);
+          setEditingAddressId(null);
+          setToastMessage('✅ address updated successfully');
+          setShowToast(true);
+        } else {
+          triggerQuickLoading('Saving address...', 280);
+          const newId = 'addr_' + Date.now();
+          const newAddr: SavedAddressItem = {
+            id: newId,
+            label,
+            houseNo,
+            building,
+            landmark,
+            formattedAddress: formatted,
+            receiverName: receiverName.trim() || 'Guest',
+            receiverPhone: receiverPhone.trim() || '',
+          };
+          setSavedAddresses(prev => [newAddr, ...prev]);
+          setSelectedAddressId(newId);
+          setDeliveryAddress(formatted);
+          setToastMessage('✅ new address added successfully');
+          setShowToast(true);
+        }
+        setHouseNo('');
+        setBuilding('');
+        setLandmark('');
+        setReceiverName('');
+        setReceiverPhone('');
+        setIsAddFormOpen(false);
+        setTimeout(() => setShowToast(false), 3000);
+      },
+      {
+        icon: isEditing ? '✏️' : '📍',
+        confirmText: isEditing ? 'Yes, Update' : 'Yes, Continue',
+        isDanger: false,
+      }
+    );
+  };
+
+  const handleSelectAddress = (addr: SavedAddressItem) => {
+    if (selectedAddressId !== addr.id) {
+      triggerQuickLoading('Switching address...', 220);
     }
+    setSelectedAddressId(addr.id);
+    setDeliveryAddress(addr.formattedAddress);
+  };
+
+  const handleDeleteAddress = (addr: SavedAddressItem) => {
+    requestConfirm(
+      'Delete Saved Address',
+      `Are you sure you want to delete the saved address "${addr.formattedAddress}"?`,
+      () => {
+        const previousAddrs = [...savedAddresses];
+        const wasSelected = selectedAddressId === addr.id;
+        setSavedAddresses(prev => {
+          const filtered = prev.filter(a => a.id !== addr.id);
+          if (wasSelected && filtered.length > 0) {
+            setSelectedAddressId(filtered[0].id);
+            setDeliveryAddress(filtered[0].formattedAddress);
+          }
+          return filtered;
+        });
+        triggerUndoToast('Address deleted', () => {
+          setSavedAddresses(previousAddrs);
+          if (wasSelected) {
+            setSelectedAddressId(addr.id);
+            setDeliveryAddress(addr.formattedAddress);
+          }
+        });
+      }
+    );
   };
 
   const handleProceed = () => {
-    if (onProceed) onProceed(grandTotal);
+    triggerQuickLoading('Preparing checkout...', 350, () => {
+      if (onProceed) onProceed(grandTotal);
+    });
   };
 
-  const segmentLeft = segmentSlide.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['2%', '50%'],
-  });
-
-  const tipOptions: TipAmount[] = [0, 2, 3, 5];
+  const tipOptions: TipAmount[] = [0, 20, 30, 50];
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
 
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.headerBackBtn}>
-          <Text style={styles.headerBackIcon}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Your Cart</Text>
-        <TouchableOpacity
-          onPress={() => setCartItems([])}
-          style={styles.headerClearBtn}
+      {/* ── Top Animated Progress Bar ── */}
+      {isLoading && (
+        <Animated.View
+          style={[
+            styles.topProgressBar,
+            {
+              opacity: loadingAnim,
+              transform: [{ scaleX: progressAnim }],
+            }
+          ]}
+        />
+      )}
+
+      {/* ── Floating Smooth Animated Loader ── */}
+      {isLoading && (
+        <Animated.View
+          style={[
+            styles.floatingLoader,
+            {
+              opacity: loadingAnim,
+              transform: [
+                {
+                  translateY: loadingAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-10, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
         >
-          <Text style={styles.headerClearText}>Clear All</Text>
-        </TouchableOpacity>
+          <ActivityIndicator size="small" color={COLORS.accent} style={{ marginRight: 8 }} />
+          <Text style={styles.floatingLoaderText}>{loadingText}</Text>
+        </Animated.View>
+      )}
+
+      {/* ── Header ── */}
+      <View style={{ zIndex: 10 }}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onBack} style={styles.headerBackBtn}>
+            <Text style={styles.headerBackIcon}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Your Cart</Text>
+          <TouchableOpacity
+            onPress={handleClearAll}
+            style={styles.headerClearBtn}
+          >
+            <Text style={styles.headerClearText}>Clear All</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Toast ── */}
+        {showToast && (
+          <View style={styles.toastContainer}>
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </View>
+        )}
+
+        {/* ── Undo Toast ── */}
+        {undoToast.visible && (
+          <View style={styles.undoToastContainer}>
+            <Text style={styles.undoToastText} numberOfLines={1}>
+              {undoToast.message}
+            </Text>
+            {undoToast.onUndo && (
+              <TouchableOpacity
+                onPress={() => {
+                  undoToast.onUndo?.();
+                  setUndoToast(prev => ({ ...prev, visible: false }));
+                }}
+                style={styles.undoToastBtn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.undoToastBtnText}>↩ UNDO</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
 
-      {/* ── Delivery Mode Selector ── */}
+      {/* ── Delivery Mode Banner ── */}
       <View style={styles.segmentWrapper}>
-        <View style={styles.segmentTrack}>
-          <Animated.View style={[styles.segmentThumb, { left: segmentLeft }]} />
-          <TouchableOpacity
-            style={styles.segmentOption}
-            onPress={() => handleDeliveryMode('express')}
-          >
-            <Text style={[styles.segmentText, deliveryMode === 'express' && styles.segmentTextActive]}>
-              ⚡ Express 20–25 min
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.segmentOption}
-            onPress={() => handleDeliveryMode('scheduled')}
-          >
-            <Text style={[styles.segmentText, deliveryMode === 'scheduled' && styles.segmentTextActive]}>
-              🕐 Scheduled
-            </Text>
-          </TouchableOpacity>
+        <View style={styles.deliveryBanner}>
+          <Text style={styles.deliveryBannerText}>⚡ Express Delivery (20–25 min)</Text>
         </View>
       </View>
 
@@ -440,10 +919,240 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* ── Address Section (Top of Page) ── */}
+        <View style={[styles.section, styles.addressManagerCard]}>
+          <TouchableOpacity
+            onPress={() => setIsAddressExpanded(prev => !prev)}
+            activeOpacity={0.8}
+            style={[styles.addressSectionHeaderBtn, isAddressExpanded && styles.addressSectionHeaderBtnOpen]}
+          >
+            <View style={styles.addressHeaderPin}>
+              <Text style={{ fontSize: 16 }}>📍</Text>
+            </View>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.addressSectionHeaderLabel}>DELIVERY ADDRESS</Text>
+                <Text style={styles.addressTapToChangeHint}>{isAddressExpanded ? '(Tap to close)' : '(Tap to change / add)'}</Text>
+              </View>
+              <Text style={styles.addressSectionActiveText} numberOfLines={isAddressExpanded ? 2 : 1}>
+                {deliveryAddress}
+              </Text>
+            </View>
+            <View style={[styles.addressChevronWrapper, isAddressExpanded && styles.addressChevronWrapperExpanded]}>
+              <Text style={[styles.addressChevronIcon, isAddressExpanded && styles.addressChevronIconExpanded]}>
+                {isAddressExpanded ? '▲' : '▼'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {isAddressExpanded && (
+            <View style={styles.addressSplitLayout}>
+              {/* Left Side: Address Form */}
+              <View style={styles.addressFormColumn}>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (isAddFormOpen && editingAddressId) {
+                      handleCancelEdit();
+                    } else {
+                      setIsAddFormOpen(prev => !prev);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                  style={[styles.addNewAddressToggleBtn, (isAddFormOpen || editingAddressId !== null) && styles.addNewAddressToggleBtnActive]}
+                >
+                  <View style={[styles.addNewAddressPlusCircle, (isAddFormOpen || editingAddressId !== null) && styles.addNewAddressPlusCircleActive]}>
+                    <Text style={[styles.addNewAddressPlusText, (isAddFormOpen || editingAddressId !== null) && styles.addNewAddressPlusTextActive]}>
+                      {editingAddressId ? '✏️' : isAddFormOpen ? '−' : '+'}
+                    </Text>
+                  </View>
+                  <Text style={[styles.addNewAddressToggleLabel, (isAddFormOpen || editingAddressId !== null) && styles.addNewAddressToggleLabelActive]}>
+                    {editingAddressId ? 'Editing Address' : isAddFormOpen ? 'Close Address Form' : 'Add New Address'}
+                  </Text>
+                </TouchableOpacity>
+
+                {isAddFormOpen ? (
+                  <View style={styles.addressInputsWrapper}>
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="House No. & Floor *"
+                      placeholderTextColor={COLORS.textMuted}
+                      value={houseNo}
+                      onChangeText={setHouseNo}
+                    />
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Building & Block No. (Optional)"
+                      placeholderTextColor={COLORS.textMuted}
+                      value={building}
+                      onChangeText={setBuilding}
+                    />
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Landmark & Area Name (Optional)"
+                      placeholderTextColor={COLORS.textMuted}
+                      value={landmark}
+                      onChangeText={setLandmark}
+                    />
+
+                    <Text style={styles.formSectionTitle}>Address Label</Text>
+                    <View style={styles.labelRow}>
+                      {(['Home', 'Work', 'Other'] as const).map(l => (
+                        <TouchableOpacity
+                          key={l}
+                          onPress={() => setLabel(l)}
+                          style={[styles.labelBtn, label === l && styles.labelBtnActive]}
+                        >
+                          <Text style={[styles.labelText, label === l && styles.labelTextActive]}>
+                            {l === 'Home' ? '🏠 Home' : l === 'Work' ? '🏢 Work' : '📍 Other'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={styles.formSectionTitle}>Receiver Details</Text>
+                    <View style={styles.inputWrapper}>
+                      <Text style={styles.inputLabel}>Receiver's Name</Text>
+                      <TextInput
+                        style={styles.formInputLite}
+                        placeholder="Full Name"
+                        placeholderTextColor={COLORS.textMuted}
+                        value={receiverName}
+                        onChangeText={setReceiverName}
+                      />
+                    </View>
+                    <View style={styles.inputWrapper}>
+                      <Text style={styles.inputLabel}>Receiver's Phone Number</Text>
+                      <View style={styles.phoneInputRow}>
+                        <Text style={styles.phonePrefix}>+91</Text>
+                        <TextInput
+                          style={styles.formInputLiteFlex}
+                          placeholder="10-digit mobile"
+                          placeholderTextColor={COLORS.textMuted}
+                          value={receiverPhone}
+                          onChangeText={setReceiverPhone}
+                          keyboardType="phone-pad"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                      {editingAddressId && (
+                        <TouchableOpacity
+                          onPress={handleCancelEdit}
+                          style={styles.addressCancelEditBtn}
+                        >
+                          <Text style={styles.addressCancelEditBtnText}>Cancel</Text>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        onPress={handleSaveAddress}
+                        style={[styles.addressSaveBtn, { flex: 1 }, !houseNo.trim() && { opacity: 0.5 }]}
+                        disabled={!houseNo.trim()}
+                      >
+                        <Text style={styles.addressSaveBtnText}>
+                          {editingAddressId ? '💾 Update & Deliver Here' : '💾 Save & Deliver Here'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.addFormPlaceholder}>
+                    <Text style={styles.addFormPlaceholderText}>
+                      Tap "+ Add New Address" above to fill and save a new location.
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Right Side: Saved Addresses Tabs */}
+              <View style={styles.addressSavedColumn}>
+                <Text style={styles.columnHeaderTitle}>📑 Saved Addresses ({savedAddresses.length})</Text>
+                <Text style={styles.columnHeaderSub}>Tap a tab to select delivery destination:</Text>
+
+                <View style={styles.savedAddressList}>
+                  {savedAddresses.map((addr) => {
+                    const isSelected = selectedAddressId === addr.id;
+                    const isBeingEdited = editingAddressId === addr.id;
+                    return (
+                      <TouchableOpacity
+                        key={addr.id}
+                        onPress={() => handleSelectAddress(addr)}
+                        activeOpacity={0.85}
+                        style={[
+                          styles.savedAddressCard,
+                          isSelected && styles.savedAddressCardActive,
+                          isBeingEdited && styles.savedAddressCardBeingEdited,
+                        ]}
+                      >
+                        <View style={styles.savedAddressCardHeader}>
+                          <View style={[styles.savedAddressBadge, isSelected && styles.savedAddressBadgeActive]}>
+                            <Text style={[styles.savedAddressBadgeText, isSelected && styles.savedAddressBadgeTextActive]}>
+                              {addr.label === 'Home' ? '🏠 Home' : addr.label === 'Work' ? '🏢 Work' : '📍 Other'}
+                            </Text>
+                          </View>
+
+                          <View style={styles.savedAddressActionsRow}>
+                            {isSelected && (
+                              <View style={styles.activeTag}>
+                                <Text style={styles.activeTagText}>✓ DELIVERING HERE</Text>
+                              </View>
+                            )}
+
+                            {/* Edit Text Button */}
+                            <TouchableOpacity
+                              onPress={(e) => {
+                                e.stopPropagation?.();
+                                handleStartEditAddress(addr);
+                              }}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              style={styles.addressEditBtn}
+                            >
+                              <Text style={styles.addressEditText}>✏️ Edit</Text>
+                            </TouchableOpacity>
+
+                            {/* Delete 'X' Button */}
+                            <TouchableOpacity
+                              onPress={(e) => {
+                                e.stopPropagation?.();
+                                handleDeleteAddress(addr);
+                              }}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              style={styles.addressDeleteBtn}
+                            >
+                              <Text style={styles.addressDeleteIcon}>✕</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+                        <Text style={styles.savedAddressText} numberOfLines={3}>
+                          {addr.formattedAddress}
+                        </Text>
+
+                        {addr.receiverName ? (
+                          <View style={styles.savedAddressReceiverRow}>
+                            <Text style={styles.savedAddressReceiverText}>
+                              👤 {addr.receiverName} {addr.receiverPhone ? `• 📞 ${addr.receiverPhone}` : ''}
+                            </Text>
+                          </View>
+                        ) : null}
+
+                        {!isSelected && (
+                          <View style={styles.selectAddressAction}>
+                            <Text style={styles.selectAddressActionText}>Use this address →</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
         {/* ── Cart Items ── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            Order Items ({cartItems.reduce((s, i) => s + i.quantity, 0)})
+            ORDER ITEMS ({cartItems.reduce((s, i) => s + i.quantity, 0)})
           </Text>
           {cartItems.length === 0 ? (
             <View style={styles.emptyCart}>
@@ -452,9 +1161,9 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
               <Text style={styles.emptyCartSub}>Add some delicious items!</Text>
             </View>
           ) : (
-            cartItems.map(item => (
+            cartItems.map((item, index) => (
               <CartItemRow
-                key={item.id}
+                key={`${item.id}-${index}`}
                 item={item}
                 onIncrement={handleIncrement}
                 onDecrement={handleDecrement}
@@ -464,19 +1173,20 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
           )}
         </View>
 
-        {/* ── Cross-Sell Carousel ── */}
+        {/* ── Cross Sell ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>✨ You Might Also Like</Text>
+          <Text style={styles.sectionTitle}>✨ Recommended products</Text>
           <FlatList
-            data={CROSS_SELL_ITEMS}
+            data={CROSS_SELL_ITEMS.filter(item => !addedCrossSell.has(item.id) && !dismissedCrossSell.has(item.id))}
             horizontal
             showsHorizontalScrollIndicator={false}
-            keyExtractor={item => item.id}
+            keyExtractor={(item, index) => `${item.id}-${index}`}
             renderItem={({ item }) => (
               <CrossSellCard
                 item={item}
                 isAdded={addedCrossSell.has(item.id)}
                 onAdd={handleCrossSellAdd}
+                onDismiss={handleDismissCrossSell}
               />
             )}
             contentContainerStyle={styles.crossSellList}
@@ -515,10 +1225,10 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
           </View>
           {couponApplied && (
             <Text style={styles.couponSaveText}>
-              🎉 You saved ${couponDiscount.toFixed(2)} with code "{couponCode}"
+              🎉 You saved ₹{couponDiscount.toFixed(2)} with code "{couponCode}"
             </Text>
           )}
-          <Text style={styles.couponHint}>Try: SAVE10 or FLAT5</Text>
+          <Text style={styles.couponHint}>Try: SAVE10 or FLAT50</Text>
         </View>
 
         {/* ── Tip Selection ── */}
@@ -539,10 +1249,10 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
 
         {/* ── Notes ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📝 Order Notes</Text>
+          <Text style={styles.sectionTitle}>🛵 Delivery Instructions</Text>
           <TextInput
             style={styles.notesInput}
-            placeholder="Any special instructions for the restaurant?"
+            placeholder="Any special instructions for the rider?"
             placeholderTextColor={COLORS.textMuted}
             value={notes}
             onChangeText={setNotes}
@@ -556,47 +1266,60 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
           <Text style={styles.sectionTitle}>🧾 Bill Breakdown</Text>
           <View style={styles.billRow}>
             <Text style={styles.billLabel}>Subtotal</Text>
-            <Text style={styles.billValue}>${subtotal.toFixed(2)}</Text>
+            <Text style={styles.billValue}>₹{subtotal.toFixed(2)}</Text>
           </View>
           <View style={styles.billRow}>
-            <Text style={styles.billLabel}>
-              Delivery Fee {deliveryMode === 'express' ? '(Express)' : '(Scheduled)'}
+            <Text style={styles.billLabel}>Delivery Fee</Text>
+            <Text style={styles.billValue}>
+              {isFreeDelivery ? 'FREE' : `₹${deliveryFee.toFixed(2)}`}
             </Text>
-            <Text style={styles.billValue}>${deliveryFee.toFixed(2)}</Text>
-          </View>
-          <View style={styles.billRow}>
-            <Text style={styles.billLabel}>Taxes & Fees (8%)</Text>
-            <Text style={styles.billValue}>${taxes.toFixed(2)}</Text>
           </View>
           {selectedTip > 0 && (
             <View style={styles.billRow}>
               <Text style={styles.billLabel}>Rider Tip</Text>
-              <Text style={styles.billValue}>${selectedTip.toFixed(2)}</Text>
+              <Text style={styles.billValue}>₹{selectedTip.toFixed(2)}</Text>
+            </View>
+          )}
+          {itemDiscounts > 0 && (
+            <View style={styles.billRow}>
+              <Text style={styles.billLabel}>Item Discounts</Text>
+              <Text style={[styles.billValue, { color: COLORS.success }]}>
+                −₹{itemDiscounts.toFixed(2)}
+              </Text>
             </View>
           )}
           {couponDiscount > 0 && (
             <View style={styles.billRow}>
               <Text style={styles.billLabel}>Promo Discount</Text>
               <Text style={[styles.billValue, { color: COLORS.success }]}>
-                −${couponDiscount.toFixed(2)}
+                −₹{couponDiscount.toFixed(2)}
               </Text>
             </View>
           )}
           <View style={styles.billDivider} />
           <View style={styles.billRow}>
             <Text style={styles.billTotalLabel}>Grand Total</Text>
-            <Text style={styles.billTotalValue}>${grandTotal.toFixed(2)}</Text>
+            <Text style={styles.billTotalValue}>₹{grandTotal.toFixed(2)}</Text>
           </View>
         </View>
 
-        <View style={{ height: 100 }} />
+        {/* ── Celebratory Discount Message Below Bill Breakdown ── */}
+        {totalDiscount > 0 && (
+          <View style={styles.discountCelebrationBanner}>
+            <Text style={styles.discountCelebrationText}>
+              Yah! your total discount is ₹{totalDiscount.toFixed(2)}
+            </Text>
+          </View>
+        )}
+
+        <View style={{ height: 120 }} />
       </ScrollView>
 
       {/* ── Sticky Bottom Bar ── */}
-      <View style={styles.stickyBar}>
+      <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 20), marginBottom: Platform.OS === 'android' ? 15 : 0 }]}>
         <View style={styles.stickyBarInfo}>
           <Text style={styles.stickyBarLabel}>Total</Text>
-          <Text style={styles.stickyBarTotal}>${grandTotal.toFixed(2)}</Text>
+          <Text style={styles.stickyBarTotal}>₹{grandTotal.toFixed(2)}</Text>
           <Text style={styles.stickyBarItems}>
             {cartItems.reduce((s, i) => s + i.quantity, 0)} items
           </Text>
@@ -609,6 +1332,41 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
           <Text style={styles.proceedBtnText}>Proceed to Checkout →</Text>
         </AnimatedPressable>
       </View>
+
+      {/* ── Confirmation Alert Modal (No Icon) ── */}
+      <Modal
+        visible={confirmModal.isOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.deleteModalCard}>
+            <Text style={styles.deleteModalTitle}>{confirmModal.title}</Text>
+            <Text style={styles.deleteModalMessage}>{confirmModal.message}</Text>
+
+            <View style={styles.deleteModalBtnRow}>
+              <TouchableOpacity
+                onPress={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                style={styles.deleteModalCancelBtn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={confirmModal.onConfirm}
+                style={[styles.deleteModalConfirmBtn, !confirmModal.isDanger && { backgroundColor: COLORS.accent, shadowColor: COLORS.accent }]}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.deleteModalConfirmText, !confirmModal.isDanger && { color: COLORS.background }]}>
+                  {confirmModal.confirmText || 'Yes, Delete'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -616,6 +1374,40 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: COLORS.background },
+  topProgressBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: COLORS.accent,
+    zIndex: 999,
+  },
+  floatingLoader: {
+    position: 'absolute',
+    top: 64,
+    alignSelf: 'center',
+    zIndex: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(29, 30, 40, 0.94)',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.accent + '80',
+    shadowColor: COLORS.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  floatingLoaderText: {
+    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 20, paddingVertical: 16,
@@ -636,19 +1428,132 @@ const styles = StyleSheet.create({
   },
   headerClearText: { color: COLORS.accent, fontSize: 13, fontWeight: '600' },
 
+  // Address Selector Lite
+  addressSectionLite: {
+    backgroundColor: COLORS.surface,
+    marginHorizontal: 20,
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  addressHeaderLite: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+  },
+  goldPinLite: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  addressHeaderLabelLite: {
+    fontSize: 11,
+    color: COLORS.accent,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  addressHeaderStreetLite: {
+    fontSize: 13,
+    color: COLORS.textPrimary,
+    marginTop: 2,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  addressEditIcon: {
+    fontSize: 18,
+    color: COLORS.accent,
+    paddingLeft: 10,
+  },
+  addressEditContainer: {
+    padding: 12,
+  },
+  addressInput: {
+    backgroundColor: COLORS.background,
+    color: COLORS.textPrimary,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    borderColor: COLORS.border,
+    borderWidth: 1,
+  },
+  addressEditActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+  },
+  addressCancelBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginRight: 8,
+  },
+  addressCancelBtnText: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  addressSaveBtn: {
+    backgroundColor: COLORS.accent,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  addressSaveBtnText: {
+    color: COLORS.background,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  toastContainer: {
+    position: 'absolute',
+    top: 60,
+    alignSelf: 'center',
+    backgroundColor: COLORS.success,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    zIndex: 100,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  toastText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
   segmentWrapper: { paddingHorizontal: 20, paddingVertical: 14 },
-  segmentTrack: {
-    flexDirection: 'row', backgroundColor: COLORS.surface,
+  deliveryBanner: {
+    backgroundColor: COLORS.surface,
     borderRadius: COLORS.pillRadius, borderWidth: 1.5,
-    borderColor: COLORS.accent, height: 46, position: 'relative', overflow: 'hidden',
+    borderColor: COLORS.accent, height: 46,
+    alignItems: 'center', justifyContent: 'center',
   },
-  segmentThumb: {
-    position: 'absolute', top: 3, width: '48%',
-    bottom: 3, backgroundColor: COLORS.accent, borderRadius: 18,
+  deliveryBannerText: { color: COLORS.accent, fontSize: 14, fontWeight: '700' },
+
+  freeDeliveryBanner: {
+    backgroundColor: COLORS.success + '15',
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.success + '40',
   },
-  segmentOption: { flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  segmentText: { color: COLORS.textMuted, fontSize: 13, fontWeight: '600' },
-  segmentTextActive: { color: COLORS.background, fontWeight: '700' },
+  freeDeliveryText: {
+    color: COLORS.success,
+    fontWeight: '700',
+    fontSize: 13,
+  },
 
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 20 },
@@ -682,6 +1587,7 @@ const styles = StyleSheet.create({
   cartItemCustomization: { fontSize: 12, color: COLORS.textMuted, marginBottom: 8 },
   cartItemFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cartItemPrice: { fontSize: 16, fontWeight: '800', color: COLORS.accent },
+  cartItemOriginalPrice: { fontSize: 12, color: COLORS.textMuted, textDecorationLine: 'line-through', marginLeft: 6 },
 
   stepperContainer: {
     flexDirection: 'row', alignItems: 'center',
@@ -739,7 +1645,7 @@ const styles = StyleSheet.create({
   tipSubText: { fontSize: 12, color: COLORS.textMuted, marginTop: -8, marginBottom: 12 },
   tipRow: { flexDirection: 'row', gap: 10 },
   tipChip: {
-    flex: 1, paddingVertical: 10, borderRadius: COLORS.pillRadius,
+    flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: COLORS.pillRadius,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: COLORS.border,
   },
@@ -759,6 +1665,30 @@ const styles = StyleSheet.create({
   billDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: 10 },
   billTotalLabel: { fontSize: 17, fontWeight: '800', color: COLORS.textPrimary },
   billTotalValue: { fontSize: 20, fontWeight: '900', color: COLORS.accent, letterSpacing: 0.5 },
+
+  discountCelebrationBanner: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.success + '20',
+    borderRadius: COLORS.cardRadius,
+    borderWidth: 1.5,
+    borderColor: COLORS.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.success,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  discountCelebrationText: {
+    color: COLORS.success,
+    fontWeight: '800',
+    fontSize: 15,
+    letterSpacing: 0.3,
+  },
 
   stickyBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -781,6 +1711,383 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
   },
   proceedBtnText: { color: COLORS.background, fontSize: 15, fontWeight: '800', letterSpacing: 0.2 },
+
+  addressFormTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary },
+  addressEditTopHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  closeAddressBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: COLORS.softHighlight },
+  closeAddressBtnText: { color: COLORS.accent, fontSize: 13, fontWeight: '700' },
+
+  addressManagerCard: { borderColor: COLORS.accent + '40', marginBottom: 6 },
+  addressSectionHeaderBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 2 },
+  addressSectionHeaderBtnOpen: { paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  addressHeaderPin: { width: 34, height: 34, borderRadius: 17, backgroundColor: COLORS.softHighlight, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  addressSectionHeaderLabel: { fontSize: 11, color: COLORS.accent, fontWeight: '800', letterSpacing: 0.8 },
+  addressTapToChangeHint: { fontSize: 11, color: COLORS.textMuted, fontWeight: '500' },
+  addressSectionActiveText: { fontSize: 13, color: COLORS.textPrimary, fontWeight: '600', marginTop: 2 },
+  addressChevronWrapper: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.softHighlight, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.border },
+  addressChevronWrapperExpanded: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
+  addressChevronIcon: { fontSize: 11, fontWeight: '800', color: COLORS.accent },
+  addressChevronIconExpanded: { color: COLORS.background },
+
+  addressSplitLayout: { flexDirection: SCREEN_WIDTH > 700 ? 'row' : 'column', gap: 16, paddingTop: 14 },
+  addressFormColumn: { flex: 1 },
+  addressSavedColumn: { flex: 1, borderLeftWidth: SCREEN_WIDTH > 700 ? 1 : 0, borderLeftColor: COLORS.border, paddingLeft: SCREEN_WIDTH > 700 ? 16 : 0, borderTopWidth: SCREEN_WIDTH > 700 ? 0 : 1, borderTopColor: COLORS.border, paddingTop: SCREEN_WIDTH > 700 ? 0 : 16 },
+
+  columnHeaderTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 4 },
+  columnHeaderSub: { fontSize: 12, color: COLORS.textMuted, marginBottom: 12 },
+
+  formInput: { backgroundColor: COLORS.background, color: COLORS.textPrimary, borderRadius: 8, padding: 10, fontSize: 13, borderColor: COLORS.border, borderWidth: 1, marginBottom: 8 },
+  formSectionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textPrimary, marginTop: 8, marginBottom: 6 },
+  labelRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  labelBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background, alignItems: 'center' },
+  labelBtnActive: { borderColor: COLORS.accent, backgroundColor: COLORS.accent + '20' },
+  labelText: { color: COLORS.textMuted, fontSize: 12, fontWeight: '600' },
+  labelTextActive: { color: COLORS.accent, fontWeight: '700' },
+  inputWrapper: { marginBottom: 10, position: 'relative', marginTop: 8 },
+  inputLabel: { position: 'absolute', top: -7, left: 10, backgroundColor: COLORS.surface, paddingHorizontal: 4, fontSize: 11, color: COLORS.textMuted, zIndex: 1 },
+  formInputLite: { backgroundColor: COLORS.background, color: COLORS.textPrimary, borderRadius: 8, padding: 10, fontSize: 13, borderColor: COLORS.border, borderWidth: 1 },
+  phoneInputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, borderRadius: 8, borderColor: COLORS.border, borderWidth: 1, paddingHorizontal: 10 },
+  phonePrefix: { color: COLORS.textPrimary, fontSize: 13, fontWeight: '500', marginRight: 6, borderRightWidth: 1, borderRightColor: COLORS.border, paddingRight: 6 },
+  formInputLiteFlex: { flex: 1, color: COLORS.textPrimary, paddingVertical: 10, fontSize: 13 },
+
+  savedAddressList: { gap: 10 },
+  savedAddressCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    padding: 12,
+    marginBottom: 8,
+  },
+  savedAddressCardActive: {
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.softHighlight,
+  },
+  savedAddressCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  savedAddressBadge: {
+    backgroundColor: COLORS.softHighlight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  savedAddressBadgeActive: {
+    backgroundColor: COLORS.accent + '25',
+    borderColor: COLORS.accent,
+  },
+  savedAddressBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+  },
+  savedAddressBadgeTextActive: {
+    color: COLORS.accent,
+  },
+  activeTag: {
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  activeTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.background,
+    letterSpacing: 0.5,
+  },
+  savedAddressCardBeingEdited: {
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.accent + '15',
+  },
+  savedAddressActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  addressEditBtn: {
+    backgroundColor: COLORS.softHighlight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  addressEditText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.accent,
+  },
+  undoToastContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1E293B',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  undoToastText: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+    marginRight: 10,
+  },
+  undoToastBtn: {
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  undoToastBtnText: {
+    color: COLORS.background,
+    fontWeight: '800',
+    fontSize: 12,
+    letterSpacing: 0.5,
+  },
+  addressDeleteBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.softHighlight,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  addressDeleteIcon: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.error,
+  },
+  addressCancelEditBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    backgroundColor: COLORS.softHighlight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addressCancelEditBtnText: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  savedAddressText: {
+    fontSize: 13,
+    color: COLORS.textPrimary,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  addNewAddressToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.softHighlight,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: COLORS.accent + '50',
+    marginBottom: 10,
+  },
+  addNewAddressToggleBtnActive: {
+    backgroundColor: COLORS.accent + '18',
+    borderColor: COLORS.accent,
+  },
+  addNewAddressPlusCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  addNewAddressPlusCircleActive: {
+    backgroundColor: COLORS.accent,
+  },
+  addNewAddressPlusText: {
+    color: COLORS.background,
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 18,
+  },
+  addNewAddressPlusTextActive: {
+    color: COLORS.background,
+  },
+  addNewAddressToggleLabel: {
+    color: COLORS.accent,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  addNewAddressToggleLabelActive: {
+    color: COLORS.accent,
+    fontWeight: '800',
+  },
+  addressInputsWrapper: {
+    marginTop: 4,
+  },
+  addFormPlaceholder: {
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  addFormPlaceholderText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  savedAddressReceiverRow: {
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border + '60',
+  },
+  savedAddressReceiverText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  selectAddressAction: {
+    marginTop: 8,
+    alignItems: 'flex-end',
+  },
+  selectAddressActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.accent,
+  },
+
+  crossSellDismissBtn: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    zIndex: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  crossSellDismissText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    zIndex: 999,
+  },
+  deleteModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 24,
+  },
+  deleteModalIconWrapper: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: COLORS.error + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: COLORS.error + '40',
+  },
+  deleteModalIcon: {
+    fontSize: 28,
+  },
+  deleteModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  deleteModalMessage: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 22,
+  },
+  deleteModalBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  deleteModalCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: COLORS.softHighlight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  deleteModalCancelText: {
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  deleteModalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: COLORS.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.error,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  deleteModalConfirmText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
 });
 
 export default CartScreen;

@@ -6,13 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
-  SafeAreaView,
   StatusBar,
   Modal,
   Platform,
   Easing,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Address, PaymentMethod, OrderSummary } from './types';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -727,6 +727,7 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({
   grandTotal = 42.76,
   onBack,
 }) => {
+  const insets = useSafeAreaInsets();
   const [selectedAddress, setSelectedAddress] = useState<string>('addr1');
   const [selectedPayment, setSelectedPayment] = useState<string>('pm1');
   const [useWalletBalance, setUseWalletBalance] = useState(false);
@@ -737,7 +738,7 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({
   const [orderId, setOrderId] = useState('');
   const [estimatedTime, setEstimatedTime] = useState('');
 
-  const walletBalance = 12.5;
+  const walletBalance = 250;
   const finalTotal = useWalletBalance
     ? Math.max(0, grandTotal - walletBalance)
     : grandTotal;
@@ -833,7 +834,7 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({
         <View style={styles.summaryBanner}>
           <View style={styles.summaryLeft}>
             <Text style={styles.summaryLabel}>Order Total</Text>
-            <Text style={styles.summaryAmount}>${grandTotal.toFixed(2)}</Text>
+            <Text style={styles.summaryAmount}>₹{grandTotal.toFixed(2)}</Text>
           </View>
           <View style={styles.summaryRight}>
             <Text style={styles.summaryMethodLabel}>{selectedPM.icon} {selectedPM.label}</Text>
@@ -936,7 +937,7 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({
             value={useWalletBalance}
             onToggle={() => setUseWalletBalance(v => !v)}
             label="Use Wallet Balance"
-            subLabel={`Available: $${walletBalance.toFixed(2)} — ${useWalletBalance ? `Saves $${Math.min(walletBalance, grandTotal).toFixed(2)}` : 'Tap to apply'}`}
+            subLabel={`Available: ₹${walletBalance.toFixed(2)} — ${useWalletBalance ? `Saves ₹${Math.min(walletBalance, grandTotal).toFixed(2)}` : 'Tap to apply'}`}
           />
           <View style={styles.walletDivider} />
           <GoldToggle
@@ -952,20 +953,20 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({
           <Text style={styles.sectionTitle}>Order Summary</Text>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryRowLabel}>Items Total</Text>
-            <Text style={styles.summaryRowValue}>${grandTotal.toFixed(2)}</Text>
+            <Text style={styles.summaryRowValue}>₹{grandTotal.toFixed(2)}</Text>
           </View>
           {useWalletBalance && (
             <View style={styles.summaryRow}>
               <Text style={styles.summaryRowLabel}>Wallet Applied</Text>
               <Text style={[styles.summaryRowValue, { color: '#4CAF50' }]}>
-                −${Math.min(walletBalance, grandTotal).toFixed(2)}
+                −₹{Math.min(walletBalance, grandTotal).toFixed(2)}
               </Text>
             </View>
           )}
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryTotalLabel}>You Pay</Text>
-            <Text style={styles.summaryTotalValue}>${finalTotal.toFixed(2)}</Text>
+            <Text style={styles.summaryTotalValue}>₹{finalTotal.toFixed(2)}</Text>
           </View>
         </View>
 
@@ -982,13 +983,13 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({
       </ScrollView>
 
       {/* ── Sticky Pay Button ── */}
-      <View style={styles.stickyBar}>
+      <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 20), marginBottom: Platform.OS === 'android' ? 15 : 0 }]}>
         <View style={styles.stickyBarInfo}>
           <Text style={styles.stickyPayLabel}>You Pay</Text>
-          <Text style={styles.stickyPayAmount}>${finalTotal.toFixed(2)}</Text>
+          <Text style={styles.stickyPayAmount}>₹{finalTotal.toFixed(2)}</Text>
           {useWalletBalance && (
             <Text style={styles.stickyWalletSave}>
-              Wallet: −${Math.min(walletBalance, grandTotal).toFixed(2)}
+              Wallet: −₹{Math.min(walletBalance, grandTotal).toFixed(2)}
             </Text>
           )}
         </View>
@@ -999,7 +1000,7 @@ const PaymentCheckoutScreen: React.FC<PaymentCheckoutScreenProps> = ({
           disabled={isProcessing}
         >
           <Text style={styles.payBtnText}>
-            {isProcessing ? 'Processing…' : `Pay $${finalTotal.toFixed(2)}`}
+            {isProcessing ? 'Processing…' : `Pay ₹${finalTotal.toFixed(2)}`}
           </Text>
         </AnimatedPressable>
       </View>
