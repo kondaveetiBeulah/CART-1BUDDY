@@ -1327,22 +1327,6 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
               />
             ))}
           </View>
-        </View>
-
-        {/* ── Notes ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🛵 Delivery Instructions</Text>
-          <TextInput
-            style={styles.notesInput}
-            placeholder="Any special instructions for the rider?"
-            placeholderTextColor={COLORS.textMuted}
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            numberOfLines={3}
-          />
-        </View>
-
         {/* ── Bill Breakdown ── */}
         <View style={[styles.section, styles.billCard]}>
           <Text style={styles.sectionTitle}>🧾 Bill Breakdown</Text>
