@@ -1327,6 +1327,8 @@ const CartScreen: React.FC<CartScreenProps> = ({ onProceed, onBack }) => {
               />
             ))}
           </View>
+        </View>
+
         {/* ── Bill Breakdown ── */}
         <View style={[styles.section, styles.billCard]}>
           <Text style={styles.sectionTitle}>🧾 Bill Breakdown</Text>
